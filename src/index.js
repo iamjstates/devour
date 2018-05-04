@@ -337,7 +337,7 @@ class JsonApi {
   update (modelName, payload, params = {}, meta = {}) {
     let req = {
       method: 'PATCH',
-      url: this.urlFor({model: modelName, id: payload.id}),
+      url: this.urlFor({model: modelName, id: payload.slug}),
       model: modelName,
       data: payload,
       params: params,
