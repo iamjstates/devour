@@ -16,7 +16,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/twg/devour.git"
+    "url": "git+https://github.com/iamjstates/devour.git"
   },
   "keywords": [
     "Devour",
@@ -31,14 +31,14 @@
   ],
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/twg/devour/issues"
+    "url": "https://github.com/iamjstates/devour/issues"
   },
   "babel": {
     "presets": [
       "es2015"
     ]
   },
-  "homepage": "https://github.com/twg/devour#readme",
+  "homepage": "https://github.com/iamjstates/devour#readme",
   "devDependencies": {
     "babel-cli": "^6.8.0",
     "babel-core": "^6.7.7",
