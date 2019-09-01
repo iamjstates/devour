@@ -36,22 +36,10 @@ const jsonApiDeleteMiddleware = require('./middleware/json-api/req-delete')
 const jsonApiGetMiddleware = require('./middleware/json-api/req-get')
 const jsonApiHeadersMiddleware = require('./middleware/json-api/req-headers')
 const railsParamsSerializer = require('./middleware/json-api/rails-params-serializer')
+const bearerTokenMiddleware = require('./middleware/json-api/req-bearer')
 const sendRequestMiddleware = require('./middleware/request')
 const deserializeResponseMiddleware = require('./middleware/json-api/res-deserialize')
-const processErrors = require('./middleware/json-api/res-errors')
-
-let jsonApiMiddleware = [
-  jsonApiHttpBasicAuthMiddleware,
-  jsonApiPostMiddleware,
-  jsonApiPatchMiddleware,
-  jsonApiDeleteMiddleware,
-  jsonApiGetMiddleware,
-  jsonApiHeadersMiddleware,
-  railsParamsSerializer,
-  sendRequestMiddleware,
-  processErrors,
-  deserializeResponseMiddleware
-]
+const errorsMiddleware = require('./middleware/json-api/res-errors')
 
 class JsonApi {
 
@@ -60,11 +48,27 @@ class JsonApi {
       throw new Error('Invalid argument, initialize Devour with an object.')
     }
 
+    const processErrors = errorsMiddleware.getMiddleware(options)
+
+    let jsonApiMiddleware = [
+      jsonApiHttpBasicAuthMiddleware,
+      jsonApiPostMiddleware,
+      jsonApiPatchMiddleware,
+      jsonApiDeleteMiddleware,
+      jsonApiGetMiddleware,
+      jsonApiHeadersMiddleware,
+      bearerTokenMiddleware,
+      railsParamsSerializer,
+      sendRequestMiddleware,
+      processErrors,
+      deserializeResponseMiddleware
+    ]
     let defaults = {
       middleware: jsonApiMiddleware,
       logger: true,
       resetBuilderOnCall: true,
       auth: {},
+      bearer: null,
       trailingSlash: {collection: false, resource: false}
     }
 
@@ -88,6 +92,7 @@ class JsonApi {
     this.axios = axios
     this.auth = options.auth
     this.apiUrl = options.apiUrl
+    this.bearer = options.bearer
     this.models = {}
     this.deserialize = deserialize
     this.serialize = serialize
@@ -123,8 +128,20 @@ class JsonApi {
     return this
   }
 
-  relationships () {
-    this.builderStack.push({path: 'relationships'})
+  relationships (relationshipName) {
+    let lastRequest = _last(this.builderStack)
+    this.builderStack.push({ path: 'relationships' })
+    if (!relationshipName) return this
+
+    let modelName = _get(lastRequest, 'model')
+    if (!modelName) {
+      throw new Error('Relationships must be called with a preceeding model.')
+    }
+
+    let relationship = this.relationshipFor(modelName, relationshipName)
+
+    this.builderStack.push({ path: relationshipName, model: relationship.type })
+
     return this
   }
 
@@ -246,6 +263,11 @@ class JsonApi {
   }
 
   insertMiddleware (middlewareName, direction, newMiddleware) {
+    if (this.middlewareExists(newMiddleware.name)) {
+      Logger.error('The middleware ' + newMiddleware.name + ' already exists')
+      return
+    }
+
     let middleware = this.middleware.filter(middleware => (middleware.name === middlewareName))
     if (middleware.length > 0) {
       let index = this.middleware.indexOf(middleware[0])
@@ -257,8 +279,27 @@ class JsonApi {
   }
 
   replaceMiddleware (middlewareName, newMiddleware) {
+    if (!this.middlewareExists(newMiddleware.name)) {
+      Logger.error('The middleware ' + newMiddleware.name + ' does not exists')
+      return
+    }
+
     let index = _findIndex(this.middleware, ['name', middlewareName])
     this.middleware[index] = newMiddleware
+  }
+
+  removeMiddleware (middlewareName) {
+    if (!this.middlewareExists(middlewareName)) {
+      Logger.error('The middleware ' + middlewareName + ' does not exists')
+      return
+    }
+
+    let index = _findIndex(this.middleware, ['name', middlewareName])
+    this.middleware.splice(index, 1)
+  }
+
+  middlewareExists (middlewareName) {
+    return this.middleware.some(middleware => (middleware.name === middlewareName))
   }
 
   define (modelName, attributes, options = {}) {
@@ -372,6 +413,17 @@ class JsonApi {
     }
 
     return this.models[modelName]
+  }
+
+  relationshipFor (modelName, relationshipName) {
+    let model = this.modelFor(modelName)
+    let relationship = model.attributes[relationshipName]
+
+    if (!relationship) {
+      throw new Error(`API resource definition on model "${modelName}" for relationship "${relationshipName}" not found. Available attributes: ${Object.keys(model.attributes)}`)
+    }
+
+    return relationship
   }
 
   collectionPathFor (modelName) {
